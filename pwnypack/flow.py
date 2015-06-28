@@ -32,7 +32,7 @@ Examples:
 import subprocess
 import sys
 import socket
-
+import paramiko
 
 __all__ = [
     'ProcessChannel',
@@ -200,6 +200,23 @@ class SocketChannel(object):
         self._socket.close()
 
 
+class SSHSocketChannel(SocketChannel):
+    def __init__(self, host, port):
+        #load_host_keys(os.path.expanduser(os.path.join("~", ".ssh", "known_hosts")))
+
+        paramiko.util.log_to_file('/tmp/para')
+        transport = paramiko.Transport((host, port))
+
+        rsa_key = paramiko.RSAKey.from_private_key_file('RSA_FILE_LOCATION')
+
+        transport.connect(username='root', pkey=rsa_key)
+        chan = transport.open_session()
+        chan.setblocking(0)
+        chan.invoke_shell()
+
+        super(SSHSocketChannel, self).__init__(chan)
+
+
 class TCPSocketChannel(SocketChannel):
     """
     Convenience subclass of :class:`SocketChannel` that allows you to connect
@@ -311,7 +328,6 @@ class Flow(object):
         Raises:
             EOFError: If the channel was closed before *n* lines were read.
         """
-
         return [
             self.until(b'\n', echo)
             for _ in range(n)
@@ -330,7 +346,6 @@ class Flow(object):
         Raises:
             EOFError: If the channel was closed before a line was read.
         """
-
         return self.readlines(1, echo)[0]
 
     def write(self, data, echo=None):
@@ -413,6 +428,23 @@ class Flow(object):
 
         echo = kwargs.pop('echo', False)
         return cls(ProcessChannel(executable, *arguments, **kwargs), echo=echo)
+
+    @classmethod
+    def connect_ssh(cls, host, port, echo=False):
+        """
+        Set up a :class:`TCPSocketChannel` and create a :class:`Flow` instance
+        for it.
+
+        Args:
+            host(str): The hostname or IP address to connect to.
+            port(int): The port number to connect to.
+            echo(bool): Whether to echo read/written data to stdout by default.
+
+        Returns:
+            :class:`Flow`: A Flow instance initialised with the SSH
+                channel.
+        """
+        return cls(SSHSocketChannel(host, port), echo=echo)
 
     @classmethod
     def connect_tcp(cls, host, port, echo=False):
